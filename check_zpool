@@ -1,0 +1,228 @@
+#!/bin/bash
+
+readonly __NAME="check_zpool"
+readonly __VERSION="1.0.0-20221012"
+
+readonly OK=0
+readonly WARNING=1
+readonly CRITICAL=2
+readonly UNKNOWN=3
+
+readonly DEFAULT_ZPOOL_CMD="/usr/sbin/zpool"
+readonly OPTIONS="VZ:e:hp:"
+readonly LONG_OPTIONS="version,zpool-cmd:,exclude:,help,pool:"
+
+
+function version() {
+    cat << EoF
+${__NAME} version ${__VERSION}
+
+Copyright (C) 2022 by Andreas Maus <maus@ypbind.de>
+This program comes with ABSOLUTELY NO WARRANTY.
+
+This program is distributed under the Terms of the GNU General
+Public License Version 3. (http://www.gnu.org/copyleft/gpl.html)
+
+EoF
+}
+
+
+function usage() {
+    version
+    cat << EoF
+Usage: ${__NAME} [-e <excl>,<excl>,...|--exclude=<excl>,<excl>,...] [-h|--help]
+  [-p <pool>,<pool>,...|--pool=<pool>,<pool>,...] [-V|--version]
+  [-Z <cmd>|--zpool=<cmd>]
+
+    -V                          Show version information
+    --version
+
+    -Z <cmd>                    Path to zpool command.
+    --zpool-cmd=<cmd>           Default: ${DEFAULT_ZPOOL_CMD}
+
+    -e <excl>,<excl>,...        Komma separated list of zpool names to be
+    --exclude=<excl>,<excl>,... excluded from the check.
+
+    -h                          This text
+    --help
+
+    -p <pool>,<pool>            Komma separated list of zpool names to check.
+    --pool=<pool>,<pool>        Default: Check all zpools
+
+EoF
+}
+
+
+function join() {
+    local IFS="$1"
+    shift
+    echo "$*"
+}
+
+
+zpool_cmd="${DEFAULT_ZPOOL_CMD}"
+_exclude=""
+_pools=""
+
+opar=$(getopt -o ${OPTIONS} --long ${LONG_OPTIONS} -n "$(basename $0)" -- "$@")
+if [ $? -ne 0 ]; then
+    echo "Can't parse command line"
+    exit ${UNKNOWN}
+fi
+
+eval set -- "${opar}"
+
+while true; do
+    case "$1" in
+        "-V"|"--version")
+            version
+            exit ${OK}
+            ;;
+        "-Z"|"--zpool-cmd")
+            zpool_cmd="$2"
+            shift 2
+            ;;
+        "-e"|"--exclude")
+            _exclude="$2"
+            shift 2
+            ;;
+        "-h"|"--help")
+            usage
+            exit ${OK}
+            ;;
+        "-p"|"--pool")
+            _pools="$2"
+            shift 2
+            ;;
+        "--")
+            break
+            ;;
+        "*")
+            echo "Error: Can't parse command line options" >&2
+            usage
+            exit ${UNKNOWN}
+            ;;
+    esac
+done
+
+readonly zpool_cmd
+
+if [ ! -r "${zpool_cmd}" -o ! -x "${zpool_cmd}" ]; then
+    echo "ZPool command ${zpool_cmd} not found or not executable" >&2
+    exit ${UNKNOWN}
+fi
+
+exclude=()
+pools=()
+
+# Store excluded pool names
+if [ ! -z "${_exclude}" ]; then
+    IFS="," read -ra exclude <<< "${_exclude}"
+fi
+readonly exclude
+
+declare -A excl_dict
+let count=${#exclude[@]}-1
+
+for i in $(seq 0 ${count}); do
+    name="${exclude[${i}]}"
+    excl_dict["${name}"]="exclude"
+done
+readonly excl_dict
+
+# Store list of pools to check or get list of all pools
+if [ ! -z "${_pools}" ]; then
+    IFS="," read -ra pools <<< "${_pools}"
+else
+    _IFS=${IFS}
+    IFS=$'\n'
+    pools=($(${zpool_cmd} list -Ho name))
+    IFS=${_IFS}
+fi
+readonly pools
+
+if [ ${#pools[@]} -eq 0 ]; then
+    echo "UNKNOWN - No zpool found"
+    exit ${UNKNOWN}
+fi
+
+state_ok=()
+state_warn=()
+state_crit=()
+state_unknown=()
+
+let pcount=${#pools[@]}-1
+
+for i in $(seq 0 ${pcount}); do
+    p="${pools[${i}]}"
+
+    # Check if pool is in exclude list
+    if [ -z "${excl_dict[${p}]}" ]; then
+        health=$(${zpool_cmd} list -Ho health "${p}")
+        if [ $? -ne 0 ]; then
+            echo "UNKNOWN - ${zpool_cmd} list -Ho health "${p}" failed with non-zero exit code" >&2
+            exit ${UNKNOWN}
+        fi
+
+        case "${health}" in
+            "ONLINE")
+                state_ok+=("ZPOOL ${p} is ${health}")
+                ;;
+            "DEGRADED")
+                state_warn+=("ZPOOL ${p} is ${health}")
+                ;;
+            "FAULTED"|"OFFLINE"|"REMOVED"|"UNAVAIL")
+                state_crit+=("ZPOOL ${p} is ${health}")
+                ;;
+            *)
+                state_unknown+=("Unknwon health state ${health} for zpool ${p}")
+                ;;
+        esac
+    fi
+done
+
+
+let count_ok=${#state_ok[@]}
+let count_warn=${#state_warn[@]}
+let count_crit=${#state_crit[@]}
+let count_unknown=${#state_unknown[@]}
+
+result=${UNKNOWN}
+prepend="UNKNOWN"
+message=""
+
+if [ ${count_unknown} -gt 0 ]; then
+    message+=$(join '\n' "${state_unknown[@]}")
+    result=${UNKNOWN}
+    prepend="UNKNOWN"
+fi
+
+if [ ${count_crit} -gt 0 ]; then
+    message+=$(join '\n' "${state_crit[@]}")
+    result=${CRITICAL}
+    prepend="CRITICAL"
+fi
+
+if [ ${count_warn} -gt 0 ]; then
+    message+=$(join '\n' "${state_warn[@]}")
+    result=${WARNING}
+    prepend="WARNING"
+fi
+
+if [ ${count_ok} -gt 0 ]; then
+    message+=$(join '\n' "${state_ok[@]}")
+    result=${OK}
+    prepend="OK"
+fi
+
+if [ -z "${message}" ]; then
+    message="No zpools found"
+fi
+
+readonly prepend
+readonly message
+readonly result
+
+echo "${prepend} - ${message}"
+exit ${result}
+
