@@ -1,7 +1,7 @@
 #!/bin/bash
 
 readonly __NAME="check_zpool"
-readonly __VERSION="1.0.0-20221012"
+readonly __VERSION="1.0.0-20221014"
 
 readonly OK=0
 readonly WARNING=1
@@ -64,9 +64,7 @@ zpool_cmd="${DEFAULT_ZPOOL_CMD}"
 _exclude=""
 _pools=""
 
-opar=$(getopt -o ${OPTIONS} --long ${LONG_OPTIONS} -n "$(basename $0)" -- "$@")
-if [ $? -ne 0 ]; then
-    echo "Can't parse command line"
+if ! opar=$(getopt -o ${OPTIONS} --long ${LONG_OPTIONS} -n "$(basename "$0")" -- "$@"); then
     exit ${UNKNOWN}
 fi
 
@@ -107,7 +105,7 @@ done
 
 readonly zpool_cmd
 
-if [ ! -r "${zpool_cmd}" -o ! -x "${zpool_cmd}" ]; then
+if [ ! -r "${zpool_cmd}" ] || [ ! -x "${zpool_cmd}" ]; then
     echo "ZPool command ${zpool_cmd} not found or not executable" >&2
     exit ${UNKNOWN}
 fi
@@ -116,13 +114,13 @@ exclude=()
 pools=()
 
 # Store excluded pool names
-if [ ! -z "${_exclude}" ]; then
+if [ -n "${_exclude}" ]; then
     IFS="," read -ra exclude <<< "${_exclude}"
 fi
 readonly exclude
 
 declare -A excl_dict
-let count=${#exclude[@]}-1
+(( count=${#exclude[@]}-1 ))
 
 for i in $(seq 0 ${count}); do
     name="${exclude[${i}]}"
@@ -131,13 +129,10 @@ done
 readonly excl_dict
 
 # Store list of pools to check or get list of all pools
-if [ ! -z "${_pools}" ]; then
+if [ -n "${_pools}" ]; then
     IFS="," read -ra pools <<< "${_pools}"
 else
-    _IFS=${IFS}
-    IFS=$'\n'
-    pools=($(${zpool_cmd} list -Ho name))
-    IFS=${_IFS}
+    mapfile -t pools < <(${zpool_cmd} list -Ho name)
 fi
 readonly pools
 
@@ -151,16 +146,15 @@ state_warn=()
 state_crit=()
 state_unknown=()
 
-let pcount=${#pools[@]}-1
+(( pcount=${#pools[@]}-1 ))
 
 for i in $(seq 0 ${pcount}); do
     p="${pools[${i}]}"
 
     # Check if pool is in exclude list
     if [ -z "${excl_dict[${p}]}" ]; then
-        health=$(${zpool_cmd} list -Ho health "${p}")
-        if [ $? -ne 0 ]; then
-            echo "UNKNOWN - ${zpool_cmd} list -Ho health "${p}" failed with non-zero exit code" >&2
+        if ! health=$(${zpool_cmd} list -Ho health "${p}"); then
+            echo "UNKNOWN - ${zpool_cmd} list -Ho health \"${p}\" failed with non-zero exit code" >&2
             exit ${UNKNOWN}
         fi
 
@@ -182,10 +176,10 @@ for i in $(seq 0 ${pcount}); do
 done
 
 
-let count_ok=${#state_ok[@]}
-let count_warn=${#state_warn[@]}
-let count_crit=${#state_crit[@]}
-let count_unknown=${#state_unknown[@]}
+(( count_ok=${#state_ok[@]} ))
+(( count_warn=${#state_warn[@]} ))
+(( count_crit=${#state_crit[@]} ))
+(( count_unknown=${#state_unknown[@]} ))
 
 result=${UNKNOWN}
 prepend="UNKNOWN"
