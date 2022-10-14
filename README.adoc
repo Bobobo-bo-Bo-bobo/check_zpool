@@ -1,0 +1,39 @@
+= check_zpool - Nagios check to check the health of ZFS ZPOOLs
+:stylesheet: asciidoc.css
+:toc: left
+
+== Repositories
+
+* Primary development repository: https://git.ypbind.de/cgit/check_zpool/
+* Backup repository: https://github.com/Bobobo-bo-Bo-bobo/check_zpool/
+
+== Preface
+ZFS provides a unique and feature rich filesystem, used by many users and organisations.
+To ensure the health of the filesystems and data integrity, the status of the ZPOOLs should be
+checked at regular intervals.
+
+== Requirements
+In addtion to BASH version 4 or newer a working ZFS installation - especially the `zpool` command - is required.
+
+== Command line parameters
+
+[width="100%",cols="<26%,<30%,<44%",options="header",]
+|===
+|_Parameter_ |_Description_ |_Default_
+|`-V` / `--version` |Show version information |-
+|`-Z <cmd>` / `--zpool-cmd=<cmd>` |Path to `zpool` command |`/usr/sbin/zpool`
+|`-e <excl>,<excl>,...` / `--exclude=<excl>,<excl>,...` |Komm separated list of ZPOOL name to be excluded from the check |-
+|`-h` / `--help` | Show help text |-
+|`-p <pool>,<pool>,...` / `--pool=<pool>,<pool>,...` |Komma separated list of ZPOOL names to check |Check all ZPOOLs
+|===
+
+== Licenses
+
+=== check_zpool
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program. If not, see https://www.gnu.org/licenses/.
+

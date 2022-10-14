@@ -1,7 +1,7 @@
 #!/bin/bash
 
 readonly __NAME="check_zpool"
-readonly __VERSION="1.0.0-20221014"
+readonly __VERSION="1.0.0"
 
 readonly OK=0
 readonly WARNING=1
@@ -40,14 +40,14 @@ Usage: ${__NAME} [-e <excl>,<excl>,...|--exclude=<excl>,<excl>,...] [-h|--help]
     -Z <cmd>                    Path to zpool command.
     --zpool-cmd=<cmd>           Default: ${DEFAULT_ZPOOL_CMD}
 
-    -e <excl>,<excl>,...        Komma separated list of zpool names to be
+    -e <excl>,<excl>,...        Komma separated list of ZPOOL names to be
     --exclude=<excl>,<excl>,... excluded from the check.
 
     -h                          This text
     --help
 
-    -p <pool>,<pool>            Komma separated list of zpool names to check.
-    --pool=<pool>,<pool>        Default: Check all zpools
+    -p <pool>,<pool>            Komma separated list of ZPOOL names to check.
+    --pool=<pool>,<pool>        Default: Check all ZPOOLs
 
 EoF
 }
